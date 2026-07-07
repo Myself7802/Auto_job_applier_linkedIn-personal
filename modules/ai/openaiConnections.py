@@ -214,11 +214,43 @@ def ai_extract_skills(client: OpenAI, job_description: str, stream: bool = strea
 
 
 ##> ------ Dheeraj Deshwal : dheeraj9811 Email:dheeraj20194@iiitd.ac.in/dheerajdeshwal9811@gmail.com - Feature ------
+def build_tailored_prompt(
+    question: str,
+    question_type: str,
+    question_category: str,
+    answer_style: str,
+    max_chars: int,
+    job_description: str | None,
+    about_company: str | None,
+    user_information_all: str | None,
+    compensation_context: str = "N/A",
+    fallback_templates: str = "N/A",
+) -> str:
+    return tailored_ai_answer_prompt.format(
+        user_information=user_information_all or "N/A",
+        question=question,
+        question_type=question_type,
+        question_category=question_category,
+        answer_style=answer_style,
+        max_chars=max_chars,
+        compensation_context=compensation_context,
+        fallback_templates=fallback_templates,
+        job_description=job_description if job_description and job_description != "Unknown" else "N/A",
+        about_company=about_company if about_company and about_company != "Unknown" else "N/A",
+    )
+
+
 def ai_answer_question(
     client: OpenAI, 
     question: str, options: list[str] | None = None, question_type: Literal['text', 'textarea', 'single_select', 'multiple_select'] = 'text', 
     job_description: str = None, about_company: str = None, user_information_all: str = None,
-    stream: bool = stream_output
+    stream: bool = stream_output,
+    structured: bool = False,
+    question_category: str = "general",
+    answer_style: str = "short_text",
+    max_chars: int = 350,
+    compensation_context: str = "N/A",
+    fallback_templates: str = "N/A",
 ) -> dict | ValueError:
     """
     Function to generate AI-based answers for questions in a form.
@@ -239,17 +271,34 @@ def ai_answer_question(
 
     print_lg("-- ANSWERING QUESTION using AI")
     try:
-        prompt = ai_answer_prompt.format(user_information_all or "N/A", question)
-         # Append optional details if provided
-        if job_description and job_description != "Unknown":
-            prompt += f"\nJob Description:\n{job_description}"
-        if about_company and about_company != "Unknown":
-            prompt += f"\nAbout the Company:\n{about_company}"
+        if structured:
+            prompt = build_tailored_prompt(
+                question=question,
+                question_type=question_type,
+                question_category=question_category,
+                answer_style=answer_style,
+                max_chars=max_chars,
+                job_description=job_description,
+                about_company=about_company,
+                user_information_all=user_information_all,
+                compensation_context=compensation_context,
+                fallback_templates=fallback_templates,
+            )
+        else:
+            prompt = ai_answer_prompt.format(user_information_all or "N/A", question)
+            if job_description and job_description != "Unknown":
+                prompt += f"\nJob Description:\n{job_description}"
+            if about_company and about_company != "Unknown":
+                prompt += f"\nAbout the Company:\n{about_company}"
 
         messages = [{"role": "user", "content": prompt}]
         print_lg("Prompt we are passing to AI: ", prompt)
-        response =  ai_completion(client, messages, stream=stream)
-        # print_lg("Response from AI: ", response)
+        response =  ai_completion(
+            client,
+            messages,
+            response_format=tailored_answer_response_format if structured else None,
+            stream=stream if not structured else False
+        )
         return response
     except Exception as e:
         ai_error_alert(f"Error occurred while answering question. {apiCheckInstructions}", e)

@@ -181,7 +181,13 @@ def deepseek_answer_question(
     question: str, options: list[str] | None = None, 
     question_type: Literal['text', 'textarea', 'single_select', 'multiple_select'] = 'text', 
     job_description: str = None, about_company: str = None, user_information_all: str = None,
-    stream: bool = stream_output
+    stream: bool = stream_output,
+    structured: bool = False,
+    question_category: str = "general",
+    answer_style: str = "short_text",
+    max_chars: int = 350,
+    compensation_context: str = "N/A",
+    fallback_templates: str = "N/A",
 ) -> dict | ValueError:
     '''
     Function to answer a question using DeepSeek AI.
@@ -200,10 +206,24 @@ def deepseek_answer_question(
         user_info = user_information_all or ""
         
         # Prepare prompt based on question type
-        prompt = ai_answer_prompt.format(user_info, question)
+        if structured:
+            prompt = tailored_ai_answer_prompt.format(
+                user_information=user_info or "N/A",
+                question=question,
+                question_type=question_type,
+                question_category=question_category,
+                answer_style=answer_style,
+                max_chars=max_chars,
+                compensation_context=compensation_context,
+                fallback_templates=fallback_templates,
+                job_description=job_description if job_description else "N/A",
+                about_company=about_company if about_company else "N/A",
+            )
+        else:
+            prompt = ai_answer_prompt.format(user_info, question)
         
         # Add options to the prompt if available
-        if options and (question_type in ['single_select', 'multiple_select']):
+        if options and (question_type in ['single_select', 'multiple_select']) and not structured:
             options_str = "OPTIONS:\n" + "\n".join([f"- {option}" for option in options])
             prompt += f"\n\n{options_str}"
             
@@ -213,10 +233,10 @@ def deepseek_answer_question(
                 prompt += "\n\nYou may select MULTIPLE options from the list above if appropriate."
         
         # Add job details for context if available
-        if job_description:
+        if job_description and not structured:
             prompt += f"\n\nJOB DESCRIPTION:\n{job_description}"
         
-        if about_company:
+        if about_company and not structured:
             prompt += f"\n\nABOUT COMPANY:\n{about_company}"
         
         messages = [{"role": "user", "content": prompt}]
@@ -225,8 +245,9 @@ def deepseek_answer_question(
         result = deepseek_completion(
             client=client,
             messages=messages,
+            response_format={"type": "json_object"} if structured else None,
             temperature=0.1,  # Slight randomness for more natural responses
-            stream=stream
+            stream=stream if not structured else False
         )
         
         return result

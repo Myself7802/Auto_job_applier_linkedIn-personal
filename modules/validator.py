@@ -101,6 +101,18 @@ def validate_questions() -> None | ValueError | TypeError:
     check_boolean(pause_before_submit, "pause_before_submit")
     check_boolean(pause_at_failed_question, "pause_at_failed_question")
     check_boolean(overwrite_previous_answers, "overwrite_previous_answers")
+    check_boolean(use_tailored_ai_answers, "use_tailored_ai_answers")
+    check_boolean(pause_on_low_confidence_ai_answer, "pause_on_low_confidence_ai_answer")
+    if not isinstance(tailored_ai_confidence_threshold, (int, float)):
+        raise TypeError(f'Invalid input for tailored_ai_confidence_threshold. Expecting an Integer or Float!')
+    if tailored_ai_confidence_threshold < 0 or tailored_ai_confidence_threshold > 1:
+        raise ValueError('Invalid input for tailored_ai_confidence_threshold. Expecting a value between 0 and 1.')
+    check_int(tailored_ai_max_chars, "tailored_ai_max_chars", 50)
+    check_int(tailored_salary_variation_percent, "tailored_salary_variation_percent", 0)
+    if tailored_salary_variation_percent > 50:
+        raise ValueError('Invalid input for tailored_salary_variation_percent. Expecting a value less than or equal to 50.')
+    check_string(why_join_fallback_template, "why_join_fallback_template", min_length=10)
+    check_string(why_leave_fallback_template, "why_leave_fallback_template", min_length=10)
 
 
 from config.search import *
@@ -168,15 +180,8 @@ def validate_secrets() -> None | ValueError | TypeError:
     check_boolean(stream_output, "stream_output")
     
     ##> ------ Yang Li : MARKYangL - Feature ------
-    # Validate DeepSeek configuration
-    check_string(ai_provider, "ai_provider", ["openai", "deepseek"])
-
-    ##> ------ Tim L : tulxoro - Refactor ------
-    if ai_provider == "deepseek":
-        check_string(llm_model, "deepseek_model", ["deepseek-chat", "deepseek-reasoner"])
-    else:
-        check_string(llm_model, "llm_model")
-    ##<
+    check_string(ai_provider, "ai_provider", ["openai"])
+    check_string(llm_model, "llm_model")
 
     ##<
 

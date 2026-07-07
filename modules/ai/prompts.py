@@ -129,3 +129,86 @@ Respond concisely based on the type of question:
 {}
 """
 #<
+
+tailored_answer_response_format = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "Tailored_Question_Answer",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"},
+                "answer_type": {
+                    "type": "string",
+                    "enum": [
+                        "numeric",
+                        "short_text",
+                        "long_text",
+                        "motivation",
+                        "leaving_reason",
+                        "compensation",
+                        "fallback"
+                    ]
+                },
+                "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "reasoning_tags": array_of_strings
+            },
+            "required": ["answer", "answer_type", "confidence", "reasoning_tags"],
+            "additionalProperties": False
+        },
+    },
+}
+"""
+Response schema for tailored answer generation.
+"""
+
+tailored_ai_answer_prompt = """
+You are filling a LinkedIn Easy Apply form for a job seeker.
+
+Your task is to produce one answer for the form question using the candidate profile and job context.
+
+RULES:
+1. Return only the requested JSON object.
+2. Keep the answer human, concise, and professional.
+3. Never mention that an AI wrote the answer.
+4. Do not invent certifications, employers, degrees, immigration status, salary history, or notice period beyond the supplied profile.
+5. For numeric questions, the `answer` must contain only the numeric value with no currency symbols or extra text.
+6. For motivation or leaving-reason questions, keep the answer positive and employer-safe.
+7. Respect the maximum character guidance when provided.
+8. If job context is weak, still answer using the supplied candidate profile and set a lower confidence.
+
+CANDIDATE PROFILE:
+{user_information}
+
+QUESTION:
+{question}
+
+QUESTION TYPE:
+{question_type}
+
+QUESTION CATEGORY:
+{question_category}
+
+ANSWER STYLE:
+{answer_style}
+
+MAX CHARACTERS:
+{max_chars}
+
+BASE COMPENSATION CONTEXT:
+{compensation_context}
+
+OPTIONAL ANSWER TEMPLATES:
+{fallback_templates}
+
+JOB DESCRIPTION:
+{job_description}
+
+ABOUT COMPANY:
+{about_company}
+"""

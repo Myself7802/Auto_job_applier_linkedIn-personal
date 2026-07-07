@@ -131,7 +131,13 @@ def gemini_answer_question(
     model,
     question: str, options: list[str] | None = None, 
     question_type: Literal['text', 'textarea', 'single_select', 'multiple_select'] = 'text', 
-    job_description: str = None, about_company: str = None, user_information_all: str = None
+    job_description: str = None, about_company: str = None, user_information_all: str = None,
+    structured: bool = False,
+    question_category: str = "general",
+    answer_style: str = "short_text",
+    max_chars: int = 350,
+    compensation_context: str = "N/A",
+    fallback_templates: str = "N/A",
 ) -> str:
     """
     Answers a question using the Gemini API.
@@ -139,9 +145,23 @@ def gemini_answer_question(
     try:
         print_lg(f"Answering question using Gemini AI: {question}")
         user_info = user_information_all or ""
-        prompt = ai_answer_prompt.format(user_info, question)
+        if structured:
+            prompt = tailored_ai_answer_prompt.format(
+                user_information=user_info or "N/A",
+                question=question,
+                question_type=question_type,
+                question_category=question_category,
+                answer_style=answer_style,
+                max_chars=max_chars,
+                compensation_context=compensation_context,
+                fallback_templates=fallback_templates,
+                job_description=job_description if job_description else "N/A",
+                about_company=about_company if about_company else "N/A",
+            )
+        else:
+            prompt = ai_answer_prompt.format(user_info, question)
 
-        if options and (question_type in ['single_select', 'multiple_select']):
+        if options and (question_type in ['single_select', 'multiple_select']) and not structured:
             options_str = "OPTIONS:\n" + "\n".join([f"- {option}" for option in options])
             prompt += f"\n\n{options_str}"
             if question_type == 'single_select':
@@ -149,13 +169,13 @@ def gemini_answer_question(
             else:
                 prompt += "\n\nYou may select MULTIPLE options from the list above if appropriate."
         
-        if job_description:
+        if job_description and not structured:
             prompt += f"\n\nJOB DESCRIPTION:\n{job_description}"
         
-        if about_company:
+        if about_company and not structured:
             prompt += f"\n\nABOUT COMPANY:\n{about_company}"
 
-        return gemini_completion(model, prompt)
+        return gemini_completion(model, prompt, is_json=structured)
     except Exception as e:
         critical_error_log("Error occurred while answering question with Gemini!", e)
         return {"error": str(e)}

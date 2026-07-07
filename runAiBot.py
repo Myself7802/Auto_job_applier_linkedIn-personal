@@ -38,7 +38,7 @@ from selenium.common.exceptions import NoSuchElementException, ElementClickInter
 from config.personals import *
 from config.questions import *
 from config.search import *
-from config.secrets import use_AI, username, password, ai_provider
+from config.secrets import use_AI, username, password
 from config.settings import *
 
 from modules.open_chrome import *
@@ -48,8 +48,6 @@ from modules.validator import validate_config
 
 if use_AI:
     from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
-    from modules.ai.deepseekConnections import deepseek_create_client, deepseek_extract_skills, deepseek_answer_question
-    from modules.ai.geminiConnections import gemini_create_client, gemini_extract_skills, gemini_answer_question
 
 from typing import Literal
 
@@ -436,6 +434,162 @@ def answer_common_questions(label: str, answer: str) -> str:
     return answer
 
 
+def classify_question_label(label: str) -> str:
+    '''
+    Classifies Easy Apply questions into broad categories for rule-based and AI-assisted handling.
+    '''
+    label_low = label.lower()
+
+    if 'why are you leaving' in label_low or 'reason for leaving' in label_low or ('leaving' in label_low and 'organization' in label_low):
+        return "leaving_reason"
+    if ('why' in label_low or 'interested' in label_low or 'motivation' in label_low) and any(word in label_low for word in ['join', 'company', 'organisation', 'organization', 'role', 'position', 'team', 'work here', 'our company']):
+        return "motivation"
+    if any(word in label_low for word in ['salary', 'compensation', 'ctc', 'pay']):
+        if any(word in label_low for word in ['current', 'present']):
+            if any(word in label_low for word in ['why', 'justify', 'explain', 'reason']):
+                return "current_compensation_explainer"
+            return "current_compensation"
+        if any(word in label_low for word in ['why', 'justify', 'explain', 'reason', 'negotiable', 'flexible', 'expectation']):
+            return "expected_compensation_explainer"
+        return "expected_compensation"
+    if 'notice' in label_low:
+        return "notice_period"
+    if 'summary' in label_low or 'cover' in label_low or 'tell us about yourself' in label_low or 'briefly describe' in label_low:
+        return "experience_summary"
+    if 'visa' in label_low or 'sponsorship' in label_low or 'citizenship' in label_low or 'employment eligibility' in label_low:
+        return "work_authorization"
+    if any(word in label_low for word in ['phone', 'mobile', 'email', 'linkedin', 'website', 'portfolio']):
+        return "contact_profile"
+    return "general"
+
+
+def get_answer_style(question_category: str, question_type: str) -> str:
+    '''
+    Maps classified questions to a tailored answer style.
+    '''
+    if "compensation" in question_category and "explainer" not in question_category:
+        return "numeric"
+    if question_category in ["motivation", "leaving_reason"]:
+        return question_category
+    if question_category in ["expected_compensation_explainer", "current_compensation_explainer"]:
+        return "compensation"
+    if question_type == "textarea":
+        return "long_text"
+    return "short_text"
+
+
+def get_compensation_value(question_category: str, label: str, job_description: str | None = None) -> str:
+    '''
+    Returns a bounded numeric compensation answer based on configured values and light JD-aware adjustments.
+    '''
+    label_low = label.lower()
+    variation_multiplier = 1.0
+    if question_category == "expected_compensation" and job_description and use_tailored_ai_answers:
+        jd_low = job_description.lower()
+        variation_ratio = tailored_salary_variation_percent / 100
+        boost = 0.0
+        if any(word in jd_low for word in ['lead', 'staff', 'principal', 'architect']):
+            boost += variation_ratio * 0.6
+        if any(word in jd_low for word in ['generative ai', 'llm', 'rag', 'agentic', 'langgraph', 'langchain']):
+            boost += variation_ratio * 0.4
+        if any(word in jd_low for word in ['remote', 'global', 'distributed team']):
+            boost += variation_ratio * 0.2
+        variation_multiplier += min(boost, variation_ratio)
+
+    if question_category in ["current_compensation", "current_compensation_explainer"]:
+        if 'month' in label_low:
+            return current_ctc_monthly
+        if 'lakh' in label_low:
+            return current_ctc_lakhs
+        return current_ctc
+
+    expected_base = str(round(int(float(desired_salary)) * variation_multiplier))
+    expected_monthly = str(round(int(expected_base) / 12, 2))
+    expected_lakhs = str(round(int(expected_base) / 100000, 2))
+
+    if 'month' in label_low:
+        return expected_monthly
+    if 'lakh' in label_low:
+        return expected_lakhs
+    return expected_base
+
+
+def get_fallback_template(question_category: str) -> str:
+    '''
+    Returns configured fallback answer templates for AI-assisted open-ended answers.
+    '''
+    if question_category == "motivation":
+        return why_join_fallback_template
+    if question_category == "leaving_reason":
+        return why_leave_fallback_template
+    return "N/A"
+
+
+def maybe_pause_for_low_confidence(label: str, answer: str, confidence: float) -> None:
+    '''
+    Pauses when the AI confidence is below the configured threshold.
+    '''
+    if not pause_on_low_confidence_ai_answer:
+        return
+    if confidence >= tailored_ai_confidence_threshold:
+        return
+
+    pyautogui.confirm(
+        f'Low-confidence AI answer for question:\n\n{label}\n\nProposed answer:\n{answer}\n\nPlease review the form before continuing.',
+        "Review AI Answer",
+        ["Continue"]
+    )
+
+
+def get_tailored_ai_answer(
+    label_org: str,
+    question_type: Literal['text', 'textarea'],
+    question_category: str,
+    job_description: str | None = None,
+    about_company: str | None = None,
+) -> str | None:
+    '''
+    Gets a structured tailored answer from the configured AI provider.
+    '''
+    if not (use_AI and aiClient and use_tailored_ai_answers):
+        return None
+
+    answer_style = get_answer_style(question_category, question_type)
+    compensation_context = (
+        f"Current CTC: {current_ctc}; Current monthly CTC: {current_ctc_monthly}; Current CTC in lakhs: {current_ctc_lakhs}; "
+        f"Desired CTC: {desired_salary}; Desired monthly CTC: {desired_salary_monthly}; Desired CTC in lakhs: {desired_salary_lakhs}; "
+        f"Notice period in days: {notice_period}; Notice period in weeks: {notice_period_weeks}; Notice period in months: {notice_period_months}"
+    )
+    fallback_templates = get_fallback_template(question_category)
+
+    try:
+        response = ai_answer_question(
+            aiClient,
+            label_org,
+            question_type=question_type,
+            job_description=job_description,
+            about_company=about_company,
+            user_information_all=user_information_all,
+            structured=True,
+            question_category=question_category,
+            answer_style=answer_style,
+            max_chars=tailored_ai_max_chars,
+            compensation_context=compensation_context,
+            fallback_templates=fallback_templates,
+        )
+
+        if isinstance(response, dict):
+            answer = str(response.get("answer", "")).strip()
+            confidence = float(response.get("confidence", 0))
+            if answer:
+                maybe_pause_for_low_confidence(label_org, answer, confidence)
+                return answer[:tailored_ai_max_chars].strip() if question_type == "textarea" else answer.strip()
+    except Exception as e:
+        print_lg("Failed to get tailored AI answer!", e)
+
+    return None
+
+
 # Function to answer the questions for Easy Apply
 def answer_questions(modal: WebElement, questions_list: set, work_location: str, job_description: str | None = None ) -> set:
     # Get all questions from the page
@@ -592,6 +746,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             label_org = label.text if label else "Unknown"
             answer = "" # years_of_experience
             label = label_org.lower()
+            question_category = classify_question_label(label_org)
 
             prev_answer = text.get_attribute("value")
             if not prev_answer or overwrite_previous_answers:
@@ -615,21 +770,13 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                     elif 'week' in label:
                         answer = notice_period_weeks
                     else: answer = notice_period
-                elif 'salary' in label or 'compensation' in label or 'ctc' in label or 'pay' in label: 
-                    if 'current' in label or 'present' in label:
-                        if 'month' in label:
-                            answer = current_ctc_monthly
-                        elif 'lakh' in label:
-                            answer = current_ctc_lakhs
-                        else:
-                            answer = current_ctc
+                elif 'salary' in label or 'compensation' in label or 'ctc' in label or 'pay' in label:
+                    if "explainer" in question_category:
+                        answer = get_tailored_ai_answer(label_org, "text", question_category, job_description=job_description)
+                        if not answer:
+                            answer = get_fallback_template("leaving_reason" if question_category == "current_compensation_explainer" else "motivation")
                     else:
-                        if 'month' in label:
-                            answer = desired_salary_monthly
-                        elif 'lakh' in label:
-                            answer = desired_salary_lakhs
-                        else:
-                            answer = desired_salary
+                        answer = get_compensation_value(question_category, label_org, job_description)
                 elif 'linkedin' in label: answer = linkedIn
                 elif 'website' in label or 'blog' in label or 'portfolio' in label or 'link' in label: answer = website
                 elif 'scale of 1-10' in label: answer = confidence_level
@@ -641,17 +788,13 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 else: answer = answer_common_questions(label,answer)
                 ##> ------ Yang Li : MARKYangL - Feature ------
                 if answer == "":
-                    if use_AI and aiClient:
+                    if question_category in ["motivation", "leaving_reason", "experience_summary", "general", "expected_compensation_explainer", "current_compensation_explainer"]:
+                        answer = get_tailored_ai_answer(label_org, "text", question_category, job_description=job_description)
+                    if answer:
+                        print_lg(f'Tailored answer received for question "{label_org}" \nhere is answer: "{answer}"')
+                    elif use_AI and aiClient:
                         try:
-                            if ai_provider.lower() == "openai":
-                                answer = ai_answer_question(aiClient, label_org, question_type="text", job_description=job_description, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "deepseek":
-                                answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="text", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "gemini":
-                                answer = gemini_answer_question(aiClient, label_org, options=None, question_type="text", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            else:
-                                randomly_answered_questions.add((label_org, "text"))
-                                answer = years_of_experience
+                            answer = ai_answer_question(aiClient, label_org, question_type="text", job_description=job_description, user_information_all=user_information_all)
                             if answer and isinstance(answer, str) and len(answer) > 0:
                                 print_lg(f'AI Answered received for question "{label_org}" \nhere is answer: "{answer}"')
                             else:
@@ -681,23 +824,18 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             label_org = label.text if label else "Unknown"
             label = label_org.lower()
             answer = ""
+            question_category = classify_question_label(label_org)
             prev_answer = text_area.get_attribute("value")
             if not prev_answer or overwrite_previous_answers:
                 if 'summary' in label: answer = linkedin_summary
                 elif 'cover' in label: answer = cover_letter
+                elif question_category in ["motivation", "leaving_reason", "experience_summary", "expected_compensation_explainer", "current_compensation_explainer", "general"]:
+                    answer = get_tailored_ai_answer(label_org, "textarea", question_category, job_description=job_description)
                 if answer == "":
                 ##> ------ Yang Li : MARKYangL - Feature ------
                     if use_AI and aiClient:
                         try:
-                            if ai_provider.lower() == "openai":
-                                answer = ai_answer_question(aiClient, label_org, question_type="textarea", job_description=job_description, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "deepseek":
-                                answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "gemini":
-                                answer = gemini_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            else:
-                                randomly_answered_questions.add((label_org, "textarea"))
-                                answer = ""
+                            answer = ai_answer_question(aiClient, label_org, question_type="textarea", job_description=job_description, user_information_all=user_information_all)
                             if answer and isinstance(answer, str) and len(answer) > 0:
                                 print_lg(f'AI Answered received for question "{label_org}" \nhere is answer: "{answer}"')
                             else:
@@ -986,15 +1124,8 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     if use_AI and description != "Unknown":
                         ##> ------ Yang Li : MARKYangL - Feature ------
                         try:
-                            if ai_provider.lower() == "openai":
-                                skills = ai_extract_skills(aiClient, description)
-                            elif ai_provider.lower() == "deepseek":
-                                skills = deepseek_extract_skills(aiClient, description)
-                            elif ai_provider.lower() == "gemini":
-                                skills = gemini_extract_skills(aiClient, description)
-                            else:
-                                skills = "In Development"
-                            print_lg(f"Extracted skills using {ai_provider} AI")
+                            skills = ai_extract_skills(aiClient, description)
+                            print_lg("Extracted skills using OpenAI")
                         except Exception as e:
                             print_lg("Failed to extract skills:", e)
                             skills = "Error extracting skills"
@@ -1202,15 +1333,7 @@ def main() -> None:
         #     except Exception as e:
         #         print_lg("Opening OpenAI chatGPT tab failed!")
         if use_AI:
-            if ai_provider == "openai":
-                aiClient = ai_create_openai_client()
-            ##> ------ Yang Li : MARKYangL - Feature ------
-            # Create DeepSeek client
-            elif ai_provider == "deepseek":
-                aiClient = deepseek_create_client()
-            elif ai_provider == "gemini":
-                aiClient = gemini_create_client()
-            ##<
+            aiClient = ai_create_openai_client()
 
             try:
                 about_company_for_ai = " ".join([word for word in (first_name+" "+last_name).split() if len(word) > 3])
@@ -1282,13 +1405,8 @@ def main() -> None:
         ##> ------ Yang Li : MARKYangL - Feature ------
         if use_AI and aiClient:
             try:
-                if ai_provider.lower() == "openai":
-                    ai_close_openai_client(aiClient)
-                elif ai_provider.lower() == "deepseek":
-                    ai_close_openai_client(aiClient)
-                elif ai_provider.lower() == "gemini":
-                    pass # Gemini client does not need to be closed
-                print_lg(f"Closed {ai_provider} AI client.")
+                ai_close_openai_client(aiClient)
+                print_lg("Closed OpenAI client.")
             except Exception as e:
                 print_lg("Failed to close AI client:", e)
         ##<

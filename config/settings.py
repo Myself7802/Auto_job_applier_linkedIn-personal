@@ -73,7 +73,7 @@ run_in_background = False           # True or False, Note: True or False are cas
 # If you want to disable extensions then set disable_extensions as True (Better for performance)
 disable_extensions = False          # True or False, Note: True or False are case-sensitive
 
-# Run in safe mode. Set this true if chrome is taking too long to open or if you have multiple profiles in browser. This will open chrome in guest profile!
+# Run in safe mode. Set this true if chrome is taking too long to open or if you have multiple profiles in browser. This will use the dedicated bot profile instead of your main Chrome profile.
 safe_mode = True                    # True or False, Note: True or False are case-sensitive
 
 # Do you want scrolling to be smooth or instantaneous? (Can reduce performance if True)

@@ -1,10 +1,14 @@
 __pycache__
 .vscode
 .idea
+.env
+.env.*
+!.env.example
 
 all excels
 all resumes
 logs
+cv
 
 old
 
