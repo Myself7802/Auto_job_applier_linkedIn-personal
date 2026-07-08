@@ -33,8 +33,23 @@ search_terms = [
     "Computer Vision Engineer",
 ]
 
-# Search location, this will be filled in "City, state, or zip code" search box. If left empty as "", tool will not fill it.
-search_location = "India"               # Some valid examples: "", "United States", "India", "Chicago, Illinois, United States", "90001, Los Angeles, California, United States", "Bengaluru, Karnataka, India", etc.
+# Search location (fallback when cycling is disabled), this will be filled in "City, state, or zip code" search box.
+# If left empty as "", tool will not fill it.
+search_location = ""  # Keep empty because we cycle explicit locations below.
+
+# Enable cycling through multiple locations for remote searches.
+location_cycling_enabled = True
+
+# These are the exact values written into the LinkedIn "City, state, or zip code" box.
+# Tune these strings if LinkedIn doesn't return what you expect.
+search_locations = [
+    "India",
+    "United States",
+    "United Kingdom",
+    "Dubai, United Arab Emirates",
+    "Germany",
+    "Australia",
+]
 
 # After how many number of applications in current search should the bot switch to next search? 
 switch_number = 10                 # Fewer apps per run reduces pressure on your account

@@ -179,20 +179,21 @@ def get_applied_job_ids() -> set[str]:
 
 
 
-def set_search_location() -> None:
+def set_search_location(location_override: str | None = None) -> None:
     '''
     Function to set search location
     '''
-    if search_location.strip():
+    effective_location = location_override if location_override is not None else search_location
+    if effective_location.strip():
         try:
-            print_lg(f'Setting search location as: "{search_location.strip()}"')
+            print_lg(f'Setting search location as: "{effective_location.strip()}"')
             search_location_ele = try_xp(driver, ".//input[@aria-label='City, state, or zip code'and not(@disabled)]", False) #  and not(@aria-hidden='true')]")
-            text_input(actions, search_location_ele, search_location, "Search Location")
+            text_input(actions, search_location_ele, effective_location, "Search Location")
         except ElementNotInteractableException:
             try_xp(driver, ".//label[@class='jobs-search-box__input-icon jobs-search-box__keywords-label']")
             actions.send_keys(Keys.TAB, Keys.TAB).perform()
             actions.key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
-            actions.send_keys(search_location.strip()).perform()
+            actions.send_keys(effective_location.strip()).perform()
             sleep(2)
             actions.send_keys(Keys.ENTER).perform()
             try_xp(driver, ".//button[@aria-label='Cancel']")
@@ -201,11 +202,11 @@ def set_search_location() -> None:
             print_lg("Failed to update search location, continuing with default location!", e)
 
 
-def apply_filters() -> None:
+def apply_filters(location_override: str | None = None) -> None:
     '''
     Function to apply job search filters
     '''
-    set_search_location()
+    set_search_location(location_override)
 
     try:
         recommended_wait = 1 if click_gap < 1 else 0
@@ -1010,12 +1011,19 @@ def apply_to_jobs(search_terms: list[str]) -> None:
     current_city = current_city.strip()
 
     if randomize_search_order:  shuffle(search_terms)
-    for searchTerm in search_terms:
-        driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
-        print_lg("\n________________________________________________________________________________________________________________________\n")
-        print_lg(f'\n>>>> Now searching for "{searchTerm}" <<<<\n\n')
+    locations_to_use: list[str]
+    if location_cycling_enabled and len(search_locations) > 0:
+        locations_to_use = search_locations
+    else:
+        locations_to_use = [search_location]
 
-        apply_filters()
+    for location in locations_to_use:
+        for searchTerm in search_terms:
+            driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
+            print_lg("\n________________________________________________________________________________________________________________________\n")
+            print_lg(f'\n>>>> Now searching for "{searchTerm}" in "{location}" <<<<\n\n')
+
+            apply_filters(location_override=location)
 
         current_count = 0
         try:
