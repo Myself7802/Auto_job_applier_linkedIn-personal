@@ -422,6 +422,65 @@ def get_job_description(
         
 
 
+# Function to verify a role is strictly remote
+def is_strict_remote_job(work_style: str, work_location: str, job_description: str) -> tuple[bool, str | None]:
+    '''
+    Returns whether a job appears to be fully remote based on listing metadata and JD wording.
+    '''
+    work_style_low = (work_style or "").lower().strip()
+    work_location_low = (work_location or "").lower().strip()
+    job_description_low = (job_description or "").lower()
+
+    if work_style_low and work_style_low != "remote":
+        return False, f'Listing marked as "{work_style}" instead of Remote.'
+
+    hard_non_remote_phrases = [
+        "hybrid",
+        "on-site",
+        "onsite",
+        "in-office",
+        "in office",
+        "office-based",
+        "office based",
+        "work from office",
+        "relocate",
+        "relocation required",
+        "must be located in",
+        "must report to",
+        "commute to office",
+        "days per week in office",
+        "few days in office",
+        "2 days in office",
+        "3 days in office",
+    ]
+
+    if any(phrase in work_location_low for phrase in ["hybrid", "on-site", "onsite"]):
+        return False, f'Work location text suggests non-remote setup: "{work_location}".'
+
+    for phrase in hard_non_remote_phrases:
+        if phrase in job_description_low:
+            return False, f'Job description suggests non-remote setup via phrase "{phrase}".'
+
+    remote_positive_phrases = [
+        "fully remote",
+        "100% remote",
+        "remote role",
+        "remote position",
+        "work from home",
+        "anywhere",
+        "distributed team",
+        "remote-first",
+        "remote first",
+    ]
+
+    if work_style_low == "remote":
+        return True, None
+    if any(phrase in job_description_low for phrase in remote_positive_phrases):
+        return True, None
+
+    return False, "Could not confirm that the role is strictly remote from the listing/JD."
+
+
 # Function to upload resume
 def upload_resume(modal: WebElement, resume: str) -> tuple[bool, str]:
     try:
@@ -1127,6 +1186,16 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         rejected_jobs.add(job_id)
                         skip_count += 1
                         continue
+
+                    if strict_remote_only:
+                        is_remote, remote_reason = is_strict_remote_job(work_style, work_location, description if isinstance(description, str) else "")
+                        if not is_remote:
+                            message = f'Skipping "{title} | {company}" because role does not look strictly remote. {remote_reason}'
+                            print_lg(message)
+                            failed_job(job_id, job_link, resume, date_listed, "Not strictly remote", remote_reason or "Remote confirmation failed", "Skipped", screenshot_name)
+                            rejected_jobs.add(job_id)
+                            skip_count += 1
+                            continue
 
                     
                     if use_AI and description != "Unknown":

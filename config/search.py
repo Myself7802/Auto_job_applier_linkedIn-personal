@@ -43,12 +43,12 @@ location_cycling_enabled = True
 # These are the exact values written into the LinkedIn "City, state, or zip code" box.
 # Tune these strings if LinkedIn doesn't return what you expect.
 search_locations = [
-    "India",
     "United States",
     "United Kingdom",
     "Dubai, United Arab Emirates",
     "Germany",
     "Australia",
+    "India",
 ]
 
 # After how many number of applications in current search should the bot switch to next search? 
@@ -84,6 +84,9 @@ easy_apply_only = True             # True or False, Note: True or False are case
 experience_level = []              # (multiple select) "Internship", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"
 job_type = []                      # (multiple select) "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship", "Other"
 on_site = ["Remote"]              # (multiple select) "On-site", "Remote", "Hybrid"
+
+# Skip jobs unless they appear to be strictly remote from the listing and the JD.
+strict_remote_only = True         # True or False, Note: True or False are case-sensitive
 
 companies = []                     # (dynamic multiple select) make sure the name you type in list exactly matches with the company name you're looking for, including capitals. 
                                    # Eg: "7-eleven", "Google","X, the moonshot factory","YouTube","CapitalG","Adometry (acquired by Google)","Meta","Apple","Byte Dance","Netflix", "Snowflake","Mineral.ai","Microsoft","JP Morgan","Barclays","Visa","American Express", "Snap Inc", "JPMorgan Chase & Co.", "Tata Consultancy Services", "Recruiting from Scratch", "Epic", and so on...
