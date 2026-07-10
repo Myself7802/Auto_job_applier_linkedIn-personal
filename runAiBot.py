@@ -214,8 +214,10 @@ def apply_filters(location_override: str | None = None) -> None:
         wait.until(EC.presence_of_element_located((By.XPATH, '//button[normalize-space()="All filters"]'))).click()
         buffer(recommended_wait)
 
-        wait_span_click(driver, sort_by)
-        wait_span_click(driver, date_posted)
+        if sort_by:
+            wait_span_click(driver, sort_by, 1.5)
+        if date_posted:
+            wait_span_click(driver, date_posted, 1.5)
         buffer(recommended_wait)
 
         multi_sel_noWait(driver, experience_level) 
@@ -226,7 +228,8 @@ def apply_filters(location_override: str | None = None) -> None:
         multi_sel_noWait(driver, on_site)
         if job_type or on_site: buffer(recommended_wait)
 
-        if easy_apply_only: boolean_button_click(driver, actions, "Easy Apply")
+        if easy_apply_only:
+            boolean_button_click(driver, actions, "Easy Apply")
         
         multi_sel_noWait(driver, location)
         multi_sel_noWait(driver, industry)
@@ -240,7 +243,8 @@ def apply_filters(location_override: str | None = None) -> None:
         if in_your_network: boolean_button_click(driver, actions, "In your network")
         if fair_chance_employer: boolean_button_click(driver, actions, "Fair Chance Employer")
 
-        wait_span_click(driver, salary)
+        if salary:
+            wait_span_click(driver, salary, 1.5)
         buffer(recommended_wait)
         
         multi_sel_noWait(driver, benefits)
@@ -255,9 +259,13 @@ def apply_filters(location_override: str | None = None) -> None:
             pause_after_filters = False
 
     except Exception as e:
-        print_lg("Setting the preferences failed!")
-        pyautogui.confirm(f"Faced error while applying filters. Please make sure correct filters are selected, click on show results and click on any button of this dialog, I know it sucks. Can't turn off Pause after search when error occurs! ERROR: {e}", ["Doesn't look good, but Continue XD", "Look's good, Continue"])
-        # print_lg(e)
+        print_lg("Setting the preferences failed, continuing with current results!", e)
+        try:
+            cancel_button = try_xp(driver, ".//button[@aria-label='Cancel']", False)
+            if cancel_button:
+                cancel_button.click()
+        except Exception:
+            pass
 
 
 
